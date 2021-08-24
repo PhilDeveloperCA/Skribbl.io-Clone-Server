@@ -49,6 +49,7 @@ const hincrby = promisify(redisClient.hincrby).bind(redisClient);
 const sadd = promisify(redisClient.sadd).bind(redisClient);
 const srem = promisify(redisClient.srem).bind(redisClient);
 const smembers = promisify(redisClient.smembers).bind(redisClient);
+const srandmember = promisify(redisClient.srandmember).bind(redisClient);
 
 type UserSocket = WebSocketConnection & {id?: string, name?:string, game?:string}
 
@@ -79,7 +80,11 @@ const handleClose = async(connection) => {
     }
 }
 
-wsServer.on("request", ws  => {
+const leaveGame = async(connection) => {
+    await srem(`gameplayernames:${connection.game}`, connection.game);
+}
+
+wsServer.on("request", ws => {
     const connection= ws.accept(null, ws.origin);
     connection.id = wsServer.getUniqueID();
     connection.name = "";
@@ -145,7 +150,7 @@ async function onMessage(connection,message) {
                     //console.log(all_players[index]);
                     //console.log(clients[all_players[index].toString()]);
                     try{
-                        clients[all_players[index].toString()].send(JSON.stringify({status:ActionCodes.PlayerJoined, player:name}));
+                        clients[all_players[index].toString()].send(JSON.stringify({status:ActionCodes.PlayerJoined, player:{name}}));
                     }
                     catch(e){};
                 }
@@ -158,6 +163,31 @@ async function onMessage(connection,message) {
             }
             catch(err){
                 return connection.send(JSON.stringify({status:"Error", code: ErrorCodes.SystemError}));
+            }
+        case 'leave':
+            const groupid = result.payload.groupid;
+            name = result.payload.name; 
+            if(!groupid){
+
+            }
+            const group = await hgetall(`group:${groupid}`);
+            let admin = group.admin;
+            const all_players= await smembers(`gameplayers:${groupid}`);
+            const player_names = await smembers(`gameplayernames:${groupid }`)
+            if(name === group.admin){
+                await srem(`gameplayernames:${groupid}`, name);
+                await srem(`gameplayers:${groupid}`)
+                const new_admin = srandmember(`gameplayernames:${groupid}`);
+                await hset(`game:${groupid}`, 'admin', new_admin);
+                admin = new_admin;
+            }
+            for(let index in all_players){
+                //console.log(all_players[index]);
+                //console.log(clients[all_players[index].toString()]);
+                try{
+                    clients[all_players[index].toString()].send(JSON.stringify({status:ActionCodes.PlayerLeft, player:{admin}, admin,}));
+                }
+                catch(e){};
             }
     }
 }
