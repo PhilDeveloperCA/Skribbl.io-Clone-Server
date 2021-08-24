@@ -9,7 +9,6 @@ app.use('/api', (req,res,next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE','OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type');
-
     next();
 })
 
@@ -104,18 +103,18 @@ wsServer.on("request", ws => {
 async function onMessage(connection,message) {
     const result = JSON.parse(message.utf8Data);
     switch(result.type){
-        case 'create':
+        case 'create': //{type:"create", payload:{name, rounds, seconds}}
             let name = result.payload.name;
             const rounds = result.payload.rounds;
             const seconds = result.payload.seconds;
-            if(!name || !rounds || !seconds){
+            if(!name || !rounds || !seconds){ //Missing Fields
                 return connection.send(JSON.stringify({status: "Error", code: ErrorCodes.InvalidCreate}));
             }
-            const game_id = wsServer.getUniqueID();
+            const game_id = wsServer.getUniqueID(); // Assign ID To Game
             try {
-                await set(`player:${connection.id}`, name);
+                await set(`player:${connection.id}`, name); 
                 //name instead of id ??? -> Enforce Unique
-                await hset(`game:${game_id}`, `rounds`, rounds, `seconds`, seconds, `admin`, name);
+                await hset(`game:${game_id}`, `rounds`, rounds, `seconds`, seconds, `admin`, name); // SET GAME SETTINGs
                 await sadd(`gameplayers:${game_id}`, connection.id);
                 await sadd(`gameplayernames:${game_id}`, name);
                 connection.game = game_id;
@@ -164,6 +163,13 @@ async function onMessage(connection,message) {
             catch(err){
                 return connection.send(JSON.stringify({status:"Error", code: ErrorCodes.SystemError}));
             }
+        case 'start':
+            //check if Admin
+            const runninggame= hgetall(`game:${connection.game}`);
+            if(connection.name !== runninggame.admin){
+
+            }
+            //send message about the next player
         case 'leave':
             const groupid = result.payload.groupid;
             name = result.payload.name; 
@@ -177,7 +183,7 @@ async function onMessage(connection,message) {
             if(name === group.admin){
                 await srem(`gameplayernames:${groupid}`, name);
                 await srem(`gameplayers:${groupid}`)
-                const new_admin = srandmember(`gameplayernames:${groupid}`);
+                const new_admin = await srandmember(`gameplayernames:${groupid}`);
                 await hset(`game:${groupid}`, 'admin', new_admin);
                 admin = new_admin;
             }
@@ -189,6 +195,22 @@ async function onMessage(connection,message) {
                 }
                 catch(e){};
             }
+        case 'draw': //Includes Restart, Undraw, Draw Logic
+            let game = await hgetall(`game:${connection.game}`);
+            if(game.drawer !== connection.name){
+                return {status:"error", code: ErrorCodes.InvalidDraw}
+            }
+            await sendToGamePlayers(connection.group, JSON.stringify(result.payload), connection.name);
     }
 }
 
+const sendToGamePlayers = async (groupid, message, sender="") => {
+    const all_players= await smembers(`gameplayers:${groupid}`);
+    const players = all_players.filter((v, i) => v !== sender);
+    for(let index in players){
+        try{
+            clients[players[index].toString()].send(message);
+        }
+        catch(e){};
+    }
+}

@@ -5,7 +5,8 @@ export const ErrorCodes = {
     GameDNE : "Game Does Not Exist",
     InvalidCreate : "Missing Fields : Name || Seconds || Rounds",
     InvalidJoin : "Missing Fields : Name || Game ID",
-    SystemError: "Server System Error"
+    SystemError: "Server System Error",
+    InvalidDraw : "invalid draw"
 }
 
 export const ActionCodes = {

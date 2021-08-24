@@ -24,7 +24,7 @@
                         const results = {};
                     }
                     turn = 1;
-                    hincrby(`game${gameid}`,'current_round',1);
+                    hincrby(`game${gameid}`,'current_round',1); 
                 }
                 const turnplayer = get(`user:${members[turn]}`);
                 for(let member in members){
